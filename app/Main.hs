@@ -4,7 +4,7 @@ import System.IO
 import System.Process
 import System.Exit (ExitCode(..))
 
-import System.Directory (setCurrentDirectory)
+import System.Directory (setCurrentDirectory, getCurrentDirectory)
 
 data RedirectionType = InputRedirect | OutputRedirect
 
@@ -32,8 +32,21 @@ loop = do
 executeCommand :: [String] -> IO ExitCode
 executeCommand [] = pure ExitSuccess
 executeCommand (command:args)
-  | command == "cd" = changeDirectory args
-  | otherwise       = executeExternalCommand (command:args)
+  | command == "cd"   = changeDirectory args
+  | command == "pwd"  = printWorkingDirectory
+  | command == "echo" = echoCommand args
+  | otherwise         = executeExternalCommand (command:args)
+
+printWorkingDirectory :: IO ExitCode
+printWorkingDirectory = do
+  cwd <- getCurrentDirectory
+  putStrLn cwd
+  pure ExitSuccess
+
+echoCommand :: [String] -> IO ExitCode
+echoCommand args = do
+  putStrLn (unwords args)
+  pure ExitSuccess
 
 changeDirectory :: [String] -> IO ExitCode
 changeDirectory [] = do
@@ -45,34 +58,5 @@ changeDirectory (dir:_) = do
 
 executeExternalCommand :: [String] -> IO ExitCode
 executeExternalCommand commandArgs = do
-  -- Check for I/O redirect
-  let (commandArgs', inputRedir, outputRedir) = processRedirection commandArgs
-
-  let process = (proc (head commandArgs') (tail commandArgs'))
-                  { std_in = inputRedir
-                  , std_out = outputRedir
-                  , std_err = Inherit -- Inherit standard error
-                  }
-  (_, _, _, processHandle) <- createProcess process
+  (_, _, _, processHandle) <- createProcess (proc (head commandArgs) (tail commandArgs))
   waitForProcess processHandle
-
-processRedirection :: [String] -> ([String], Maybe Handle, Maybe Handle)
-processRedirection args = processRedirection' args Nothing Nothing
-  where
-    processRedirection' [] inRedir outRedir = ([], inRedir, outRedir)
-    processRedirection' (arg:rest) inRedir outRedir
-      | arg == "<" = case rest of
-                       (inputFile:xs) -> processRedirection' xs (Just =<< openFile inputFile ReadMode) outRedir
-                       _              -> error "Missing input file for redirection"
-      | arg == ">" = case rest of
-                       (outputFile:xs) -> processRedirection' xs inRedir (Just =<< openFile outputFile WriteMode)
-                       _               -> error "Missing output file for redirection"
-
-      | otherwise  = case inRedir of
-                       Just h  -> case outRedir of
-                                    Just h' -> ([arg], Just h, Just h')
-                                    Nothing -> ([arg], Just h, Nothing)
-                       Nothing -> case outRedir of
-                                    Just h' -> ([arg], Nothing, Just h')
-                                    Nothing -> let (args', inRedir', outRedir') = processRedirection' rest inRedir outRedir
-                                               in (arg:args', inRedir', outRedir')
