@@ -1,0 +1,8 @@
+# Sample .hakshrc file
+
+# Define environment variables
+MY_ENV_VAR="Hello, this is a custom environment variable!"
+
+# Define aliases
+alias ll ls -l
+alias greet echo Hello, welcome to my shell!
