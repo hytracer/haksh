@@ -5,13 +5,25 @@ const fs = require('fs');
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: 'haksh> '
+  prompt: 'haksh> ',
+  historySize: 100,
 });
 
 rl.prompt();
 
+const commandHistory = [];
+let commandIndex = -1;
+
 rl.on('line', (line) => {
   const pipelineCommands = line.split('|').map(cmd => cmd.trim());
+
+  if (line.trim() !== '') {
+    commandHistory.push(line);
+    if (commandHistory.length > rl.historySize) {
+      commandHistory.shift();
+    }
+    commandIndex = -1;
+  }
 
   // If a pipeline is detected
   if (pipelineCommands.length > 1) {
@@ -84,6 +96,22 @@ rl.on('line', (line) => {
           rl.prompt();
         });
       }
+    }
+  }
+});
+
+rl.on('keypress', (_, key) => {
+  if (key.name === 'up' && commandIndex < commandHistory.length - 1) {
+    commandIndex++;
+    rl.write(null, { ctrl: true, name: 'u' });
+    rl.write(commandHistory[commandHistory.length - 1 - commandIndex]);
+  } else if (key.name === 'down' && commandIndex >= 0) {
+    commandIndex--;
+    if (commandIndex === -1) {
+      rl.write(null, { ctrl: true, name: 'u' });
+    } else {
+      rl.write(null, { ctrl: true, name: 'u' });
+      rl.write(commandHistory[commandHistory.length - 1 - commandIndex]);
     }
   }
 });
