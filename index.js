@@ -1,6 +1,8 @@
 const readline = require('readline');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -9,12 +11,34 @@ const rl = readline.createInterface({
   historySize: 100,
 });
 
+const aliases = {};
+
 rl.prompt();
 
 const commandHistory = [];
 let commandIndex = -1;
 
+const rcFilePath = path.join(os.homedir(), '.hakshrc');
+
+const loadAliasesFromRc = () => {
+  try {
+    const rcContent = fs.readFileSync(rcFilePath, 'utf8');
+    const lines = rcContent.split('\n');
+    lines.forEach((line) => {
+      if (line.trim().startsWith('alias')) {
+        const [, aliasName, aliasValue] = line.match(/alias\s+(\w+)\s*=\s*(.+)/);
+        aliases[aliasName] = aliasValue.replace(/['"]/g, ''); // Remove ' or " characters
+      }
+    });
+  } catch (error) {
+    // Ignore errors if the file doesn't exist
+  }
+};
+
+loadAliasesFromRc(); // Load aliases when the shell starts
+
 rl.on('line', (line) => {
+  line = expandAliases(line);
   const pipelineCommands = line.split('|').map(cmd => cmd.trim());
 
   if (line.trim() !== '') {
@@ -68,6 +92,18 @@ rl.on('line', (line) => {
         }
       }
       rl.prompt();
+    } else if (command === 'alias') {
+      if (arguments.length === 0) {
+        // Display list of aliases
+        for (const alias in aliases) {
+          console.log(`${alias}='${aliases[alias]}'`);
+        }
+      } else {
+        const aliasName = arguments[0];
+        const aliasValue = arguments.slice(1).join(' ');
+        aliases[aliasName] = aliasValue;
+      }
+      rl.prompt();
     } else {
       const outputFileIndex = arguments.indexOf('>');
       if (outputFileIndex !== -1) {
@@ -99,6 +135,15 @@ rl.on('line', (line) => {
     }
   }
 });
+
+const expandAliases = (line) => {
+  for (const alias in aliases) {
+    const aliasPattern = new RegExp(`\\b${alias}\\b`, 'g');
+    line = line.replace(aliasPattern, aliases[alias]);
+  }
+  return line;
+};
+
 
 rl.on('keypress', (_, key) => {
   if (key.name === 'up' && commandIndex < commandHistory.length - 1) {
