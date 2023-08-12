@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "pkg index.js --target=node14-linux"
+    "build": "pkg src/index.js --target=node14-linux --out-path=dist",
+    "start": "node src"
   },
   "author": "hytracer",
   "license": "ISC",

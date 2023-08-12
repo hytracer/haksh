@@ -57,12 +57,17 @@ const formatPrompt = (customPrompt) => {
 const pluginDir =  path.join(os.homedir(), `.haksh/plugins`);
 const loadedPlugins = [];
 
+if (!fs.existsSync(pluginDir)) {
+  fs.mkdirSync(pluginDir, { recursive: true });
+  console.log(`Plugin directory created: ${pluginDir}`);
+}
+
 fs.readdirSync(pluginDir).forEach(pluginName => {
   const pluginPath = path.join(pluginDir, pluginName, 'index.js');
   if (fs.existsSync(pluginPath)) {
     const plugin = require(pluginPath);
     loadedPlugins.push({ name: pluginName, module: plugin });
-    console.log(`Loaded plugin: ${pluginName}`);
+    // console.log(`Loaded plugin: ${pluginName}`);
 
     if (typeof plugin.applyToPlaceholders === 'function') {
       plugin.applyToPlaceholders(promptPlaceholders);
