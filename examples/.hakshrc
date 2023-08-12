@@ -1,0 +1,20 @@
+#     __          __        __  
+#    / /_  ____ _/ /_______/ /_ 
+#   / __ \/ __ `/ //_/ ___/ __ \
+#  / / / / /_/ / ,< (__  ) / / /
+# /_/ /_/\__,_/_/|_/____/_/ /_/
+# 
+# C. 2023, hytracer and contributors
+
+# Welcome to your .hakshrc file !
+
+# You can configure aliases trough this file by using the default alias syntax.
+alias ll='ls -l'
+alias greet='echo Hello, welcome to my haksh!'
+
+# Customize your prompt below:
+PS1='%B\e[32m %u\e[0m@%B\e[34m%h\e[0m%B\e[36m   ~/%C \e[0m%B\e[40m󰊢 %g %s%n%B╰──────────> '
+
+# You can add any commands below for those to be ran when the shell starts:
+# neofetch
+# ls
