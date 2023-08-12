@@ -3,6 +3,29 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
+
+const events = require('events');
+const eventEmitter = new events.EventEmitter();
+
+const promptPlaceholders = {
+  '%u': os.userInfo().username,
+  '%h': os.hostname(),
+  '%i': 'IP_ADDRESS', // Replace this with actual code to get IP address
+  '%d': path.basename(process.cwd()),
+  '%t': new Date().toLocaleTimeString(),
+  '%%': '%',
+  '%c': process.cwd(),
+  '%C': path.basename(process.cwd()),
+  '%B': '\x1b[1m',  // Bold text
+  '%b': '\x1b[0m',  // Reset text formatting
+  '%n': '\n'
+};
+
+const updatePromptPlaceholders = () => {
+  promptPlaceholders['%c'] = process.cwd();
+  promptPlaceholders['%C'] = path.basename(process.cwd());
+};
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -13,31 +36,115 @@ const rl = readline.createInterface({
 
 const aliases = {};
 
-rl.prompt();
+const formatPrompt = (customPrompt) => {
+  updatePromptPlaceholders();
+  let formattedPrompt = customPrompt;
+  for (const placeholder in promptPlaceholders) {
+    formattedPrompt = formattedPrompt.replace(new RegExp(placeholder, 'g'), promptPlaceholders[placeholder]);
+  }
 
-const commandHistory = [];
-let commandIndex = -1;
+  // Add color formatting using ANSI escape codes
+  formattedPrompt = formattedPrompt.replace(/\\e\[(\d+)(?::(\d+))?m/g, (_, code, value) => {
+    if (value) {
+      return `\x1b[${code};${value}m`;
+    }
+    return `\x1b[${code}m`;
+  });
+
+  return formattedPrompt + '\x1b[0m'; // Reset color formatting at the end
+};
+
+const pluginDir =  path.join(os.homedir(), `.haksh/plugins`);
+const loadedPlugins = [];
+
+fs.readdirSync(pluginDir).forEach(pluginName => {
+  const pluginPath = path.join(pluginDir, pluginName, 'index.js');
+  if (fs.existsSync(pluginPath)) {
+    const plugin = require(pluginPath);
+    loadedPlugins.push({ name: pluginName, module: plugin });
+    console.log(`Loaded plugin: ${pluginName}`);
+
+    if (typeof plugin.applyToPlaceholders === 'function') {
+      plugin.applyToPlaceholders(promptPlaceholders);
+    }
+
+    if (typeof plugin.onCommandExecuted === 'function') {
+      eventEmitter.on('commandExecuted', command => {
+        plugin.onCommandExecuted(command);
+      });
+    }
+
+    if (typeof plugin.applyToPlaceholdersOnUpdate === 'function') {
+      eventEmitter.on('commandExecuted', command => {
+        const updateFunction = plugin.applyToPlaceholdersOnUpdate(promptPlaceholders);
+        updateFunction();
+      });
+    }
+
+
+  }
+});
+
+
+const historyFilePath = path.join(os.homedir(), '.haksh_history');
+let commandHistory = [];
+
+let customPrompt = '';
 
 const rcFilePath = path.join(os.homedir(), '.hakshrc');
+
+try {
+  const fileContents = fs.readFileSync(historyFilePath, 'utf8');
+  commandHistory = fileContents.split('\n').filter(line => line.trim() !== '');
+} catch (error) {
+  console.log(error)
+}
+
+let commandIndex = -1;
 
 const loadAliasesFromRc = () => {
   try {
     const rcContent = fs.readFileSync(rcFilePath, 'utf8');
     const lines = rcContent.split('\n');
+
+    const commandsToRun = [];
     lines.forEach((line) => {
       if (line.trim().startsWith('alias')) {
         const [, aliasName, aliasValue] = line.match(/alias\s+(\w+)\s*=\s*(.+)/);
         aliases[aliasName] = aliasValue.replace(/['"]/g, ''); // Remove ' or " characters
+      } else if (line.trim().startsWith('PS1=')) {
+        customPrompt = line.trim().substring(4).replace(/['"]/g, '');;
+      } else if (line.trim() !== '') {
+        commandsToRun.push(line.trim());
       }
     });
+
+    if (commandsToRun.length > 0) {
+      commandsToRun.forEach((command) => {
+        const result = spawnSync(command, { shell: true, stdio: 'inherit' });
+        if (result.error) {
+          console.error(`Error executing '${command}': ${result.error.message}`);
+        }
+      });
+    }
+
+    if (customPrompt) {
+      // Set the custom prompt
+      rl.setPrompt(formatPrompt(customPrompt));
+    }
   } catch (error) {
     // Ignore errors if the file doesn't exist
   }
+    setTimeout(() => {
+    rl.prompt(); // Display the prompt after executing commands
+  }, 0);
 };
 
 loadAliasesFromRc(); // Load aliases when the shell starts
 
 rl.on('line', (line) => {
+  rl.setPrompt(formatPrompt(customPrompt));
+
   line = expandAliases(line);
   const pipelineCommands = line.split('|').map(cmd => cmd.trim());
 
@@ -87,6 +194,9 @@ rl.on('line', (line) => {
       } else {
         try {
           process.chdir(arguments[0]);
+          eventEmitter.emit('commandExecuted', line);
+          updatePromptPlaceholders();
+          rl.setPrompt(formatPrompt(customPrompt));
         } catch (error) {
           console.error(`cd: ${error.message}`);
         }
@@ -129,11 +239,26 @@ rl.on('line', (line) => {
           if (code !== 0) {
             console.error(`${command} exited with status code ${code}`);
           }
+          updatePromptPlaceholders();
+          rl.setPrompt(formatPrompt(customPrompt));
           rl.prompt();
+
+          eventEmitter.emit('commandExecuted', line);
         });
+
+        try {
+          fs.writeFileSync(historyFilePath, commandHistory.join('\n'));
+          } catch (error) {
+            console.error(`Error saving command history: ${error.message}`);
+      }
       }
     }
   }
+    loadedPlugins.forEach(plugin => {
+    if (typeof plugin.module.onCommand === 'function') {
+      plugin.module.onCommand(line);
+    }
+  });
 });
 
 const expandAliases = (line) => {
@@ -142,6 +267,7 @@ const expandAliases = (line) => {
     line = line.replace(aliasPattern, aliases[alias]);
   }
   return line;
+  eventEmitter.emit('commandExecuted', line);
 };
 
 
@@ -159,6 +285,10 @@ rl.on('keypress', (_, key) => {
       rl.write(commandHistory[commandHistory.length - 1 - commandIndex]);
     }
   }
+});
+
+rl.on('line', (line) => {
+  rl.emit('export-history', commandHistory);
 });
 
 rl.on('SIGINT', () => {
