@@ -4,6 +4,8 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 
+const ansiStyles = import('ansi-styles');
+
 class WebServer {
   constructor(configPath) {
     this.configPath = configPath;
@@ -25,26 +27,50 @@ class WebServer {
     console.log('haksh config server stopped.');
   }
 
-  handleEditorRequest(req, res) {
-    const hakshrcContent = fs.readFileSync(this.configPath, 'utf-8');
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Haksh Configuration Editor</title>
-      </head>
-      <body>
-        <h1>Haksh Configuration Editor</h1>
-        <form action="/save" method="post">
-          <textarea name="config" rows="10" cols="50">${hakshrcContent}</textarea>
-          <br>
-          <button type="submit">Save</button>
-        </form>
-      </body>
-      </html>
-    `;
-    res.send(html);
+handleEditorRequest(req, res) {
+  const hakshrcContent = fs.readFileSync(this.configPath, 'utf-8');
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Haksh Configuration Editor</title>
+<script>
+  function updatePromptPreview() {
+    const input = document.getElementById('config-input');
+    const preview = document.getElementById('prompt-preview');
+    const lines = input.value.split('\\n'); // Split by newlines
+    let ps1Line = '';
+
+    for (const line of lines) {
+      if (line.trim().startsWith('PS1=')) {
+        ps1Line = line;
+        break;
+      }
+    }
+
+    const value = ps1Line.replace(/\\x1b\\[([0-9]{1,2}(;[0-9]{1,2})*)?m/g, '');
+
+    preview.innerHTML = value;
   }
+</script>
+    </head>
+    <body>
+      <h1>Haksh Configuration Editor</h1>
+      <form action="/save" method="post">
+        <textarea id="config-input" name="config" rows="10" cols="50" onkeyup="updatePromptPreview()">${hakshrcContent}</textarea>
+        <br>
+        <button type="submit">Save</button>
+      </form>
+      <div>
+        <h2>Prompt Preview:</h2>
+        <pre id="prompt-preview">... start editing to preview your prompt live</pre>
+      </div>
+    </body>
+    </html>
+  `;
+  res.send(html);
+}
+
 
   handleSaveRequest(req, res) {
     const newConfig = req.body.config;
