@@ -34,36 +34,51 @@ handleEditorRequest(req, res) {
     <html>
     <head>
       <title>Haksh Configuration Editor</title>
-<script>
-  function updatePromptPreview() {
-    const input = document.getElementById('config-input');
-    const preview = document.getElementById('prompt-preview');
-    const lines = input.value.split('\\n'); // Split by newlines
-    let ps1Line = '';
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.2/codemirror.min.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.2/theme/dracula.min.css">
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.2/codemirror.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.2/mode/shell/shell.min.js"></script>
+      <script>
+        document.addEventListener("DOMContentLoaded", function() {
+          const configInput = document.getElementById('config-input');
+          const preview = document.getElementById('prompt-preview');
 
-    for (const line of lines) {
-      if (line.trim().startsWith('PS1=')) {
-        ps1Line = line;
-        break;
-      }
-    }
+          // Initialize CodeMirror
+          const editor = CodeMirror.fromTextArea(configInput, {
+            mode: 'shell',
+            theme: 'dracula', // You can change the theme here
+            lineNumbers: true,
+            lineWrapping: true,
+            // More options as needed
+          });
 
-    const value = ps1Line.replace(/\\x1b\\[([0-9]{1,2}(;[0-9]{1,2})*)?m/g, '');
+          editor.on("change", function() {
+            const value = editor.getValue();
+            const lines = value.split('\\n');
+            let ps1Line = '';
 
-    preview.innerHTML = value;
-  }
-</script>
+            for (const line of lines) {
+              if (line.trim().startsWith('PS1=')) {
+                ps1Line = line;
+                break;
+              }
+            }
+
+            preview.innerHTML = ps1Line.replace(/\\x1b\\[([0-9]{1,2}(;[0-9]{1,2})*)?m/g, '').replace(/%n/g, '<br>');
+          });
+        });
+      </script>
     </head>
     <body>
       <h1>Haksh Configuration Editor</h1>
       <form action="/save" method="post">
-        <textarea id="config-input" name="config" rows="10" cols="50" onkeyup="updatePromptPreview()">${hakshrcContent}</textarea>
+        <textarea id="config-input" name="config" rows="10" cols="50">${hakshrcContent}</textarea>
         <br>
         <button type="submit">Save</button>
       </form>
       <div>
         <h2>Prompt Preview:</h2>
-        <pre id="prompt-preview">... start editing to preview your prompt live</pre>
+        <pre id="prompt-preview"></pre>
       </div>
     </body>
     </html>
