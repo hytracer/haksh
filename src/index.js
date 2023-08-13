@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const WebServer = require('./utils/configManager')
+
 const events = require('events');
 const eventEmitter = new events.EventEmitter();
 
@@ -147,6 +149,8 @@ const loadAliasesFromRc = () => {
 
 loadAliasesFromRc(); // Load aliases when the shell starts
 
+const webServer = new WebServer(rcFilePath);
+
 rl.on('line', (line) => {
   rl.setPrompt(formatPrompt(customPrompt));
 
@@ -208,18 +212,34 @@ rl.on('line', (line) => {
       }
       rl.prompt();
     } else if (command === 'alias') {
-      if (arguments.length === 0) {
-        // Display list of aliases
-        for (const alias in aliases) {
-          console.log(`${alias}='${aliases[alias]}'`);
-        }
+  if (arguments.length === 0) {
+    // Display list of aliases
+    for (const alias in aliases) {
+      console.log(`${alias}='${aliases[alias]}'`);
+    }
+  } else {
+    const aliasName = arguments[0];
+    const aliasValue = arguments.slice(1).join(' ');
+    aliases[aliasName] = aliasValue;
+  }
+  rl.prompt();
+} else if (command === 'hakshconfig') {
+        if (arguments.length === 0) {
+        console.log('Usage: hakshconfig start | quit');
       } else {
-        const aliasName = arguments[0];
-        const aliasValue = arguments.slice(1).join(' ');
-        aliases[aliasName] = aliasValue;
+        try {
+          if (arguments[0] === 'start') {
+            webServer.start(8080)
+          }
+          if (arguments[0] === 'quit') {
+            webServer.stop()
+          }
+        } catch (error) {
+          console.error(`${error.message}`);
+        }
       }
-      rl.prompt();
-    } else {
+  rl.prompt();
+} else {
       const outputFileIndex = arguments.indexOf('>');
       if (outputFileIndex !== -1) {
         const outputFileName = arguments[outputFileIndex + 1];
